@@ -1,0 +1,110 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, DataSource } from 'typeorm';
+import { Game, GameCategory } from './entities/game.entity';
+import { CreateGameDto, UpdateGameDto } from './dto/create-game.dto';
+
+@Injectable()
+export class GamesService {
+    constructor(
+        @InjectRepository(Game)
+        private gamesRepository: Repository<Game>,
+        @InjectRepository(GameCategory)
+        private gameCategoryRepository: Repository<GameCategory>,
+        private dataSource: DataSource,
+    ) { }
+
+    async create(createGameDto: CreateGameDto): Promise<Game> {
+        const { categoryIds, ...gameData } = createGameDto;
+
+        // Transaction to ensure consistency
+        return this.dataSource.transaction(async (manager) => {
+            const game = manager.create(Game, gameData);
+            const savedGame = await manager.save(game);
+
+            if (categoryIds && categoryIds.length > 0) {
+                const gameCategories = categoryIds.map(catId =>
+                    manager.create(GameCategory, { gameId: savedGame.id, categoryId: catId })
+                );
+                await manager.save(gameCategories);
+            }
+            return savedGame; // Return basic game info, potentially reload if relation needed
+        });
+    }
+
+    async findAll(search?: string, publishedOnly: boolean = false): Promise<Game[]> {
+        const query = this.gamesRepository.createQueryBuilder('game')
+            .leftJoinAndSelect('game.gameCategories', 'gameCategories')
+            .leftJoinAndSelect('gameCategories.category', 'category');
+
+        if (publishedOnly) {
+            query.andWhere('game.publishStatus = :status', { status: true });
+        }
+
+        if (search) {
+            query.andWhere('(game.title ILIKE :search OR game.description ILIKE :search)', { search: `%${search}%` });
+        }
+
+        query.orderBy('game.createdAt', 'DESC');
+
+        return query.getMany();
+    }
+
+    async findNew(limit: number = 10): Promise<Game[]> {
+        return this.gamesRepository.find({
+            where: { publishStatus: true },
+            order: { publishedAt: 'DESC' },
+            take: limit,
+            relations: ['gameCategories', 'gameCategories.category'],
+        });
+    }
+
+    async findTrending(limit: number = 10): Promise<Game[]> {
+        return this.gamesRepository.find({
+            where: {
+                publishStatus: true,
+                isTrending: true,
+            },
+            take: limit,
+            relations: ['gameCategories', 'gameCategories.category'],
+        });
+    }
+
+    async findOne(id: string): Promise<Game> {
+        const game = await this.gamesRepository.findOne({
+            where: { id },
+            relations: ['gameCategories', 'gameCategories.category'],
+        });
+        if (!game) throw new NotFoundException('Game not found');
+        return game;
+    }
+
+    async update(id: string, updateGameDto: UpdateGameDto): Promise<Game> {
+        const { categoryIds, ...gameData } = updateGameDto;
+
+        const game = await this.findOne(id);
+
+        // Update basic fields
+        Object.assign(game, gameData);
+        await this.gamesRepository.save(game);
+
+        // Update categories if provided
+        if (categoryIds) {
+            // Remove old
+            await this.gameCategoryRepository.delete({ gameId: id });
+
+            // Add new
+            const gameCategories = categoryIds.map(catId =>
+                this.gameCategoryRepository.create({ gameId: id, categoryId: catId })
+            );
+            await this.gameCategoryRepository.save(gameCategories);
+        }
+
+        return this.findOne(id);
+    }
+
+    async remove(id: string): Promise<void> {
+        const result = await this.gamesRepository.delete(id);
+        if (result.affected === 0) throw new NotFoundException('Game not found');
+    }
+}

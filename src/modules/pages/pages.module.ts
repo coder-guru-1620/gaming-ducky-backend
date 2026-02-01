@@ -1,0 +1,16 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { PagesService } from './pages.service';
+import { PagesController } from './pages.controller';
+import { Page } from './entities/page.entity';
+import { AdminModule } from '../admin/admin.module';
+
+@Module({
+    imports: [
+        TypeOrmModule.forFeature([Page]),
+        AdminModule,
+    ],
+    controllers: [PagesController],
+    providers: [PagesService],
+})
+export class PagesModule { }
