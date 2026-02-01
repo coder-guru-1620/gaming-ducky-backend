@@ -13,6 +13,7 @@ import { UploadController } from './modules/common/upload.controller';
 import { databaseConfig } from './config/database.config';
 
 import { PagesModule } from './modules/pages/pages.module';
+import { AppController } from './app.controller';
 
 @Module({
     imports: [
@@ -36,7 +37,7 @@ import { PagesModule } from './modules/pages/pages.module';
         GamesModule,
         PagesModule,
     ],
-    controllers: [UploadController],
+    controllers: [AppController, UploadController],
     providers: [],
 })
 export class AppModule { }
