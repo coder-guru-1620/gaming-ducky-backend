@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Game, GameCategory } from './entities/game.entity';
 import { CreateGameDto, UpdateGameDto } from './dto/create-game.dto';
+import { GameQueryDto } from './dto/game-query.dto';
 
 @Injectable()
 export class GamesService {
@@ -48,6 +49,30 @@ export class GamesService {
         query.orderBy('game.createdAt', 'DESC');
 
         return query.getMany();
+    }
+
+    async findAllAdmin(queryDto: GameQueryDto): Promise<{ data: Game[], total: number }> {
+        const { search, page, limit, sortBy, sortOrder } = queryDto;
+        const skip = (page - 1) * limit;
+
+        const query = this.gamesRepository.createQueryBuilder('game')
+            .leftJoinAndSelect('game.gameCategories', 'gameCategories')
+            .leftJoinAndSelect('gameCategories.category', 'category');
+
+        if (search) {
+            query.andWhere('(game.title ILIKE :search OR game.description ILIKE :search)', { search: `%${search}%` });
+        }
+
+        // Validate sortBy field to prevent SQL injection if using dynamic order
+        const validSortFields = ['title', 'rating', 'publishStatus', 'isTrending', 'createdAt', 'publishedAt'];
+        const sortField = validSortFields.includes(sortBy) ? `game.${sortBy}` : 'game.createdAt';
+
+        query.orderBy(sortField, sortOrder)
+            .skip(skip)
+            .take(limit);
+
+        const [data, total] = await query.getManyAndCount();
+        return { data, total };
     }
 
     async findNew(limit: number = 10): Promise<Game[]> {

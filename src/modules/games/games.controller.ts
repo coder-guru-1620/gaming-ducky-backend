@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
 import { GamesService } from './games.service';
 import { CreateGameDto, UpdateGameDto } from './dto/create-game.dto';
+import { GameQueryDto } from './dto/game-query.dto';
 import { AdminAuthGuard } from '../../modules/admin/guards/admin-auth.guard';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 
@@ -15,6 +16,14 @@ export class GamesController {
     @ApiOperation({ summary: 'Create a new game (Admin only)' })
     create(@Body() createGameDto: CreateGameDto) {
         return this.gamesService.create(createGameDto);
+    }
+
+    @Get('admin/list')
+    @ApiBearerAuth()
+    @UseGuards(AdminAuthGuard)
+    @ApiOperation({ summary: 'List all games with search, pagination, and sorting (Admin only)' })
+    findAllAdmin(@Query() queryDto: GameQueryDto) {
+        return this.gamesService.findAllAdmin(queryDto);
     }
 
     @Get('new')
